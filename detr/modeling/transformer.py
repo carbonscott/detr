@@ -173,11 +173,12 @@ class TransformerBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, tok_size,
+    def __init__(self, q_tok_size,
                        embd_size,
                        context_length,
                        num_blocks,
                        num_heads,
+                       kv_tok_size         = None,
                        uses_causal_mask    = False,
                        attention_dropout   = 0.0,
                        residual_dropout    = 0.0,
@@ -186,11 +187,14 @@ class Transformer(nn.Module):
 
         # Embed a patch token...
         ## tok_size = Hp * Wp
-        self.tok_embd_layer = nn.Linear(tok_size, embd_size)    # (B, T, N) -> (B, T, E)
+        self.q_tok_embd_layer  = nn.Linear(q_tok_size,  embd_size)    # (B, T, N) -> (B, T, E)
         ## self.tok_embd_layer = nn.Conv2d(in_channels  = 1,
         ##                                 out_channels = embd_size,
         ##                                 kernel_size  = (Hp, Wp),
         ##                                 stride       = (Hp, Wp))    # (B, T, Hp, Wp) -> (B, T, E)
+
+        if kv_tok_size is not None:
+            self.kv_tok_embd_layer = nn.Linear(kv_tok_size, embd_size)    # (B, T, N') -> (B, T, E)
 
         # Define positional embedding layer to embed each position to a vector space...
         self.pos_embd_layer = nn.Embedding(context_length, embd_size)
@@ -211,13 +215,13 @@ class Transformer(nn.Module):
         self.layernorm = nn.LayerNorm(embd_size)
 
         # Prediction head...
-        self.pred_head = nn.Linear(embd_size, tok_size)    # (B, T, E) -> (B, T, N)
+        self.pred_head = nn.Linear(embd_size, q_tok_size)    # (B, T, E) -> (B, T, N)
 
         # Store a positional tensor...
         self.register_buffer('pos_indices', torch.arange(context_length))
 
 
-    def forward(self, x, x_lookup_embd = None):
+    def forward(self, x, x_lookup = None):
         """
         N is number of tokens.
         Arguments:
@@ -226,11 +230,13 @@ class Transformer(nn.Module):
         _, T, _ = x.shape
 
         # ___/ EMBED ALL NODES \___
-        embd_q = self.tok_embd_layer(x)    # (B, T) -> (B, T, E)
+        embd_q = self.q_tok_embd_layer(x)    # (B, T) -> (B, T, E)
         pos_embd = self.pos_embd_layer(self.pos_indices[:T])    # (T) -> (T, E)
 
         embd_q = embd_q + pos_embd    # (B, T, E) + (T, E)    =
                                       # (B, T, E) + (1, T, E) = (B, T, E)
+
+        x_lookup_embd = self.kv_tok_embd_layer(x_lookup) if x_lookup is not None else x_lookup
         lookup_embd_k = x_lookup_embd + pos_embd if x_lookup_embd is not None else x_lookup_embd
         lookup_embd_v = x_lookup_embd            if x_lookup_embd is not None else x_lookup_embd    # specific to DETR design
 
