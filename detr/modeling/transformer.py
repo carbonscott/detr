@@ -58,8 +58,8 @@ class MultiHeadAttention(nn.Module):
 
         # Changes the view to facilitate scaled dot product within each head...
         q = q.view(B, T, num_heads, head_size).transpose(1, 2)   # (B, num_heads, T, head_size)
-        k = k.view(B, M,  num_heads, head_size).transpose(1, 2)   # (B, num_heads, M,  head_size)
-        v = v.view(B, M,  num_heads, head_size).transpose(1, 2)   # (B, num_heads, M,  head_size)
+        k = k.view(B, M, num_heads, head_size).transpose(1, 2)   # (B, num_heads, M,  head_size)
+        v = v.view(B, M, num_heads, head_size).transpose(1, 2)   # (B, num_heads, M,  head_size)
 
         # Scaled dot product...
         w = q @ k.transpose(-1, -2)    # (B, num_heads, T, head_size) @ (B, num_heads, head_size, M) ->
