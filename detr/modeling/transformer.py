@@ -265,11 +265,9 @@ class TransformerDecoderBlock(nn.Module):
 class TransformerEncoderDecoder(nn.Module):
     def __init__(self, context_length,
                        memory_length,
-                       tok_size,
                        embd_size,
                        num_blocks,
                        num_heads,
-                       kv_tok_size         = None,
                        uses_causal_mask    = False,
                        attention_dropout   = 0.0,
                        residual_dropout    = 0.0,
@@ -277,17 +275,6 @@ class TransformerEncoderDecoder(nn.Module):
         super().__init__()
 
         # ___/ TOK EMBD \___
-        # Embed a patch token...
-        ## tok_size = Hp * Wp
-        self.tok_embd_layer  = nn.Linear(tok_size,  embd_size)    # (B, M, N) -> (B, M, E)
-        ## self.tok_embd_layer = nn.Conv2d(in_channels  = 1,
-        ##                                 out_channels = embd_size,
-        ##                                 kernel_size  = (Hp, Wp),
-        ##                                 stride       = (Hp, Wp))    # (B, M, Hp, Wp) -> (B, M, E)
-
-        if kv_tok_size is not None:
-            self.kv_tok_embd_layer = nn.Linear(kv_tok_size, embd_size)    # (B, M, N') -> (B, M, E)
-
         # Define positional embedding layer to embed each position to a vector space...
         self.pos_embd_layer = nn.Embedding(memory_length, embd_size)
 
@@ -326,16 +313,15 @@ class TransformerEncoderDecoder(nn.Module):
         self.register_buffer('query_pos_indices', torch.arange(context_length))
 
 
-    def forward(self, x):
+    def forward(self, embd_x):
         """
         N is number of tokens.
         Arguments:
-            x : (B, M, Hp * Wp)
+            embd_x : (B, M, Hp * Wp)
         """
-        B, M, _ = x.shape
+        B, M, _ = embd_x.shape
 
         # ___/ EMBED ALL NODES \___
-        embd_x = self.tok_embd_layer(x)    # (B, M) -> (B, M, E)
         pos_embd = self.pos_embd_layer(self.pos_indices[:M])    # (M) -> (M, E)
 
         embd_x = embd_x + pos_embd    # (B, M, E) + (M, E)    =

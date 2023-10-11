@@ -1,24 +1,40 @@
 import torch
 import torch.nn as nn
 
-from ..config import CONFIG
+from ..configurator import Configurator
 
 from .regnet import ResNet50
 
 
 class ImageEncoder(nn.Module):
 
-    def __init__(self, saves_feature_per_layer = True):
+    @staticmethod
+    def get_default_config():
+        CONFIG = Configurator()
+        with CONFIG.enable_auto_create():
+            CONFIG = ResNet50.get_default_config()
+
+            CONFIG.SAVES_FEATURE_AT_LAYER = {
+                "stem"   : False,
+                "layer1" : False,
+                "layer2" : False,
+                "layer3" : False,
+                "layer4" : False,
+            }
+
+        return CONFIG
+
+
+    def __init__(self, config = None):
         super().__init__()
 
-        self.saves_feature_per_layer = saves_feature_per_layer
+        self.config = ImageEncoder.get_default_config() if config is None else config
 
         # Use the ResNet50 as the encoder...
-        self.encoder = ResNet50()
+        self.encoder = ResNet50(config = config)
 
 
     def forward(self, x):
-        saves_feature_per_layer = self.saves_feature_per_layer
         fmap_in_layers = []
 
         # Going through the immediate layers and collect feature maps...
@@ -26,8 +42,8 @@ class ImageEncoder(nn.Module):
             x = encoder_layer(x)
 
             # Save fmap from all layers except these excluded...
-            if saves_feature_per_layer and CONFIG.RESNET_ENCODER.SAVES_LAYER[name]:
+            if self.config.SAVES_FEATURE_AT_LAYER.get(name, False):
                 fmap_in_layers.append(x)
 
-        ret = fmap_in_layers if saves_feature_per_layer else x
+        ret = fmap_in_layers if len(fmap_in_layers) else x
         return ret
