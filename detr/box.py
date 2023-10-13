@@ -58,7 +58,7 @@ class GIOU(nn.Module):
             target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bt, 4)
 
         Returns:
-            area: shape of (Bs, Bt, 4)
+            area: shape of (Bs, Bt)
         """
         super_boxes = GIOU.get_pairwise_superbox_coordinates(source_boxes, target_boxes)
 
@@ -98,18 +98,56 @@ class GIOU(nn.Module):
             target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bt, 4)
 
         Returns:
-            area: shape of (Bs, Bt, 4)
+            area: shape of (Bs, Bt)
         """
         intersection_boxes = GIOU.get_pairwise_intersection_coordinates(source_boxes, target_boxes)
+        area               = GIOU.calculate_area(intersection_boxes)
 
-        y_min, x_min, y_max, x_max = intersection_boxes.permute(2, 0, 1)    # (Bs, Bt, 4) -> (4, Bs, Bt)
+        return area
+
+
+    @staticmethod
+    def calculate_pairwise_union_area(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bs, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bt, 4)
+
+        Returns:
+            area: shape of (Bs, Bt)
+        """
+        area_source_boxes = GIOU.calculate_area(source_boxes)
+        area_target_boxes = GIOU.calculate_area(target_boxes)
+
+        # Calculate the area of the intersection boxes...
+        area_intersection_boxes = GIOU.calculate_pairwise_intersection_area(source_boxes, target_boxes)
+
+        # Calculate the area of the union (A + B - Intersection(A, B))...
+        area_union_boxes = area_source_boxes + area_target_boxes - area_intersection_boxes
+
+        return area_union_boxes
+
+
+    @staticmethod
+    def calculate_area(boxes):
+        """
+        Arguments:
+        boxes: Tensor with shape (..., 4).
+               - The last dimension represents coordinates: (y_min, x_min, y_max, x_max).
+               - '...' denotes any number of preceding dimensions, each containing instances.
+
+        Returns:
+            area: shape of (...,)
+        """
+        instance_axes = range(boxes.ndim - 1)
+        y_min, x_min, y_max, x_max = boxes.permute(-1, *instance_axes)
 
         h = y_max - y_min
         w = x_max - x_min
 
-        area = h * w
+        area_boxes = h * w
 
-        return area
+        return area_boxes
 
 
     def __init__(self):
