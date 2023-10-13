@@ -90,5 +90,27 @@ class GIOU(nn.Module):
         return intersection_boxes
 
 
+    @staticmethod
+    def calculate_pairwise_intersection_area(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bs, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bt, 4)
+
+        Returns:
+            area: shape of (Bs, Bt, 4)
+        """
+        intersection_boxes = GIOU.get_pairwise_intersection_coordinates(source_boxes, target_boxes)
+
+        y_min, x_min, y_max, x_max = intersection_boxes.permute(2, 0, 1)    # (Bs, Bt, 4) -> (4, Bs, Bt)
+
+        h = y_max - y_min
+        w = x_max - x_min
+
+        area = h * w
+
+        return area
+
+
     def __init__(self):
         super().__init__()
