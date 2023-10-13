@@ -124,8 +124,8 @@ def test_giou_area():
     giou_gt            = iou - mos
 
     # Calculate by the package...
-    giou = GIOU.calculate_GIOU(source_boxes, target_boxes, returns_intermediate = False)
-    giou, intersection_area, union_area, superbox_area = GIOU.calculate_GIOU(source_boxes, target_boxes, returns_intermediate = True)
+    ## giou = GIOU.calculate_giou(source_boxes, target_boxes, returns_intermediate = False)
+    giou, intersection_area, union_area, superbox_area = GIOU.calculate_giou(source_boxes, target_boxes, returns_intermediate = True)
 
     assert intersection_area.item() == intersection_area_manual.item()
     assert union_area.item()        == union_area_manual.item()

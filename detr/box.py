@@ -149,8 +149,9 @@ class GIOU(nn.Module):
 
         return area_boxes
 
+
     @staticmethod
-    def calculate_GIOU(source_boxes, target_boxes, returns_intermediate = False):
+    def calculate_giou(source_boxes, target_boxes, returns_intermediate = False):
         """
         Arguments:
             source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bs, 4)
@@ -174,3 +175,17 @@ class GIOU(nn.Module):
 
     def __init__(self):
         super().__init__()
+
+
+    def forward(self, source_boxes, target_boxes, reduction = 'none'):
+        giou = GIOU.calculate_giou(source_boxes, target_boxes)
+
+        reduce = {
+            'none' : lambda x: x,
+            'mean' : torch.mean,
+            'sum'  : torch.sum,
+        }[reduction]
+
+        giou_reduced = reduce(giou)
+
+        return giou_reduced
