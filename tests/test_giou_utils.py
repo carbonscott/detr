@@ -105,4 +105,29 @@ def test_union_area():
     # Calculate by the package...
     area = GIOU.calculate_pairwise_union_area(source_boxes, target_boxes)
 
-    assert area.item() == 196 , f"Expected same value, but got area = {area.item()}."
+    assert area.item() == area_gt , f"Expected same value, but got area = {area.item()}."
+
+
+def test_giou_area():
+    source_boxes = torch.tensor([0, 0, 10, 10])[None,]
+
+    h_offset, w_offset = 8, 8
+    target_boxes = source_boxes + torch.tensor([h_offset, h_offset, w_offset, w_offset])
+
+    intersection_area_manual = torch.tensor(4)
+    union_area_manual        = torch.tensor(196)
+    superbox_area_manual     = torch.tensor(18*18)
+
+    margin_area_manual = superbox_area_manual - union_area_manual
+    mos                = margin_area_manual / superbox_area_manual
+    iou                = intersection_area_manual / union_area_manual
+    giou_gt            = 1 - (iou - mos)
+
+    # Calculate by the package...
+    giou = GIOU.calculate_GIOU(source_boxes, target_boxes, returns_intermediate = False)
+    giou, intersection_area, union_area, superbox_area = GIOU.calculate_GIOU(source_boxes, target_boxes, returns_intermediate = True)
+
+    assert intersection_area.item() == intersection_area_manual.item()
+    assert union_area.item()        == union_area_manual.item()
+    assert superbox_area.item()     == superbox_area_manual.item()
+    assert giou.item()              == giou_gt.item()

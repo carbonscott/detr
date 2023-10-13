@@ -149,6 +149,28 @@ class GIOU(nn.Module):
 
         return area_boxes
 
+    @staticmethod
+    def calculate_GIOU(source_boxes, target_boxes, returns_intermediate = False):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bs, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bt, 4)
+
+        Returns:
+            giou: shape of (Bs, Bt)
+        """
+        intersection_area = GIOU.calculate_pairwise_intersection_area(source_boxes, target_boxes)
+        union_area        = GIOU.calculate_pairwise_union_area       (source_boxes, target_boxes)
+        superbox_area     = GIOU.calculate_pairwise_superbox_area    (source_boxes, target_boxes)
+
+        margin_area = superbox_area - union_area
+        mos         = margin_area / superbox_area    # ...Margin over superbox
+        iou         = intersection_area / union_area
+        giou        = 1 - (iou - mos)
+
+        return giou if not returns_intermediate else \
+               giou, intersection_area, union_area, superbox_area
+
 
     def __init__(self):
         super().__init__()
