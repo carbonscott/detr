@@ -166,7 +166,7 @@ class GIOU(nn.Module):
         margin_area = superbox_area - union_area
         mos         = margin_area / superbox_area    # ...Margin over superbox
         iou         = intersection_area / union_area
-        giou        = 1 - (iou - mos)
+        giou        = iou - mos
 
         return giou if not returns_intermediate else \
                giou, intersection_area, union_area, superbox_area

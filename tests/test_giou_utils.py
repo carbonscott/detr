@@ -121,7 +121,7 @@ def test_giou_area():
     margin_area_manual = superbox_area_manual - union_area_manual
     mos                = margin_area_manual / superbox_area_manual
     iou                = intersection_area_manual / union_area_manual
-    giou_gt            = 1 - (iou - mos)
+    giou_gt            = iou - mos
 
     # Calculate by the package...
     giou = GIOU.calculate_GIOU(source_boxes, target_boxes, returns_intermediate = False)
