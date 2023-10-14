@@ -33,6 +33,97 @@ class GIOU(nn.Module):
 
 
     @staticmethod
+    def get_superbox_coordinates(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+
+        Returns:
+            super_boxes: shape of (B, 4)
+        """
+        min_coords = torch.min(source_boxes[:,  :2], target_boxes[:,  :2])    # (B, 2)
+        max_coords = torch.max(source_boxes[:, 2: ], target_boxes[:, 2: ])    # (B, 2)
+
+        super_boxes = torch.cat([min_coords, max_coords], dim = -1)    # (B, 4)
+
+        return super_boxes
+
+
+    @staticmethod
+    def calculate_superbox_area(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+
+        Returns:
+            area: shape of (B,)
+        """
+        super_boxes = GIOU.get_superbox_coordinates(source_boxes, target_boxes)    # (B, 4)
+
+        area = GIOU.calculate_area(super_boxes)
+
+        return area
+
+
+    @staticmethod
+    def get_intersection_coordinates(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...]
+            target_boxes: [(y_min, x_min, y_max, x_max), ...]
+
+        Returns:
+            super_boxes: shape of (B, 4)
+        """
+        min_coords = torch.max(source_boxes[:,  :2], target_boxes[:,  :2])    # (B, 2)
+        max_coords = torch.min(source_boxes[:, 2: ], target_boxes[:, 2: ])    # (B, 2)
+
+        intersection_boxes = torch.cat([min_coords, max_coords], dim = -1)    # (B, 4)
+
+        return intersection_boxes
+
+
+    @staticmethod
+    def calculate_intersection_area(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+
+        Returns:
+            area: shape of (B, )
+        """
+        intersection_boxes = GIOU.get_intersection_coordinates(source_boxes, target_boxes)
+        area               = GIOU.calculate_area(intersection_boxes)
+
+        return area
+
+
+    @staticmethod
+    def calculate_union_area(source_boxes, target_boxes):
+        """
+        Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+
+        Returns:
+            area: shape of (B, )
+        """
+        area_source_boxes = GIOU.calculate_area(source_boxes)
+        area_target_boxes = GIOU.calculate_area(target_boxes)
+
+        # Calculate the area of the intersection boxes...
+        area_intersection_boxes = GIOU.calculate_intersection_area(source_boxes, target_boxes)
+
+        # Calculate the area of the union (A + B - Intersection(A, B))...
+        area_union_boxes = area_source_boxes + area_target_boxes - area_intersection_boxes
+
+        return area_union_boxes
+
+
+    @staticmethod
     def get_pairwise_superbox_coordinates(source_boxes, target_boxes):
         """
         Arguments:
@@ -61,13 +152,7 @@ class GIOU(nn.Module):
             area: shape of (Bs, Bt)
         """
         super_boxes = GIOU.get_pairwise_superbox_coordinates(source_boxes, target_boxes)
-
-        y_min, x_min, y_max, x_max = super_boxes.permute(2, 0, 1)    # (Bs, Bt, 4) -> (4, Bs, Bt)
-
-        h = y_max - y_min
-        w = x_max - x_min
-
-        area = h * w
+        area        = GIOU.calculate_area(super_boxes)
 
         return area
 
@@ -154,6 +239,29 @@ class GIOU(nn.Module):
     def calculate_giou(source_boxes, target_boxes, returns_intermediate = False):
         """
         Arguments:
+            source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+            target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (B, 4)
+
+        Returns:
+            giou: shape of (B, )
+        """
+        intersection_area = GIOU.calculate_intersection_area(source_boxes, target_boxes)
+        union_area        = GIOU.calculate_union_area       (source_boxes, target_boxes)
+        superbox_area     = GIOU.calculate_superbox_area    (source_boxes, target_boxes)
+
+        margin_area = superbox_area - union_area
+        mos         = margin_area / superbox_area    # ...Margin over superbox
+        iou         = intersection_area / union_area
+        giou        = iou - mos
+
+        return giou if not returns_intermediate else \
+               (giou, intersection_area, union_area, superbox_area)
+
+
+    @staticmethod
+    def calculate_pairwise_giou(source_boxes, target_boxes, returns_intermediate = False):
+        """
+        Arguments:
             source_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bs, 4)
             target_boxes: [(y_min, x_min, y_max, x_max), ...], shape of (Bt, 4)
 
@@ -175,17 +283,3 @@ class GIOU(nn.Module):
 
     def __init__(self):
         super().__init__()
-
-
-    def forward(self, source_boxes, target_boxes, reduction = 'none'):
-        giou = GIOU.calculate_giou(source_boxes, target_boxes)
-
-        reduce = {
-            'none' : lambda x: x,
-            'mean' : torch.mean,
-            'sum'  : torch.sum,
-        }[reduction]
-
-        giou_reduced = reduce(giou)
-
-        return giou_reduced
