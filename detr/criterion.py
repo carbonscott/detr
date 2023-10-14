@@ -7,6 +7,9 @@ import torch.nn.functional as F
 
 from .box import GIOU
 
+from .configurator import Configurator
+
+
 class GIOULoss(nn.Module):
     def __init__(self, reduction = 'mean'):
         super().__init__()
@@ -18,7 +21,7 @@ class GIOULoss(nn.Module):
         }[reduction]
 
 
-    def forward(source_boxes, target_boxes):
+    def forward(self, source_boxes, target_boxes):
         giou      = GIOU.calculate_giou(source_boxes, target_boxes)
         loss_giou = 1 - giou
 
@@ -48,49 +51,33 @@ class BoxLoss(nn.Module):
 
 
 
-class CategoricalFocalLoss(nn.Module):
-    def __init__(self, alpha, gamma, num_classes = 3):
+class HungarianLoss(nn.Module):
+
+    @staticmethod
+    def get_default_config():
+        CONFIG = Configurator()
+        with CONFIG.enable_auto_create():
+            CONFIG.BOXLOSS.LAMBDA_GIOU = 10.0
+            CONFIG.BOXLOSS.LAMBDA_L1   = 1.0
+            CONFIG.REDUCTION           = 'mean'
+
+        return CONFIG
+
+
+    def __init__(self, config = None):
         super().__init__()
 
-        self.alpha = alpha
-        self.gamma = gamma
-        self.num_classes = num_classes
+        self.config = HungarianLoss.get_default_config() if config is None else config
 
-        self.min_clamp = 1e-8
-        self.max_clamp = 1-1e-8
+        self.BoxLoss = BoxLoss(self.config.BOXLOSS.LAMBDA_GIOU,
+                               self.config.BOXLOSS.LAMBDA_L1,
+                               self.config.REDUCTION)
 
-
-    def forward(self, batch_fmap_predicted, batch_mask_true):
-        # Interpret multi-channel (multi-class) through softmax...
-        batch_fmap_predicted = F.softmax(batch_fmap_predicted, dim = 1)    # B, C, H, W
-
-        # Convert integer encoded mask into one-hot...
-        batch_mask_true_onehot = self._create_one_hot(batch_mask_true)
-        loss = self._calc_categorical_focal_loss(batch_fmap_predicted, batch_mask_true_onehot)
-
-        return loss
+        self.CrossEntropyLoss = nn.CrossEntropyLoss(reduction = self.config.REDUCTION)
 
 
-    def _calc_categorical_focal_loss(self, y_pred, y):
-        '''
-        y_pred should be one-hot like.  y should use integer encoding.
-        '''
-        alpha = self.alpha
-        gamma = self.gamma
+    def forward(self, source_class_logits, target_classes, source_boxes, target_boxes):
+        loss_cross_entropy = self.CrossEntropyLoss(source_class_logits, target_classes)
+        loss_box           = self.BoxLoss(source_boxes, target_boxes)
 
-        y_pred = y_pred.clamp(min=self.min_clamp, max=self.max_clamp)
-
-        cross_entropy = -y * y_pred.log()
-        loss = alpha * (1 - y_pred)**gamma * cross_entropy
-        loss = loss.sum(dim = 1)    # sum across the class (one-hot) dimension
-
-        return loss
-
-
-    def _create_one_hot(self, batch_mask_true):
-        '''
-        B, C, H, W
-        '''
-        B, C, H, W = batch_mask_true.shape
-
-        return F.one_hot(batch_mask_true.to(torch.long).reshape(B, -1), num_classes = self.num_classes).permute(0, 2, 1).reshape(B, -1, H, W)
+        return loss_cross_entropy + loss_box
