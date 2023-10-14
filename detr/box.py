@@ -170,7 +170,7 @@ class GIOU(nn.Module):
         giou        = iou - mos
 
         return giou if not returns_intermediate else \
-               giou, intersection_area, union_area, superbox_area
+               (giou, intersection_area, union_area, superbox_area)
 
 
     def __init__(self):
