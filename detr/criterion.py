@@ -99,10 +99,10 @@ class HungarianLoss(nn.Module):
         for batch_idx in range(B):
             # Calculate pairwise cross entropy loss...
             extend_source_class_logits = source_class_logits[batch_idx,    :, None,    :].expand(-1, Nt, -1)
-            extend_target_classes      = target_classes[     batch_idx, None,    :, None].expand(Ns, -1, -1)
+            extend_target_classes      = target_classes     [batch_idx, None,    :, None].expand(Ns, -1, -1)
 
             flat_extend_source_class_logits = extend_source_class_logits.flatten(start_dim = 0, end_dim = -2)    # ...Not including feature dimension (dim=-1)
-            flat_extend_target_classes      = extend_target_classes.flatten(     start_dim = 0, end_dim = -1)
+            flat_extend_target_classes      = extend_target_classes.flatten     (start_dim = 0, end_dim = -1)
 
             loss_cross_entropy = self.CrossEntropyLoss(flat_extend_source_class_logits,
                                                        flat_extend_target_classes,).view(Ns, Nt)
