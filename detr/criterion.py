@@ -62,7 +62,6 @@ class HungarianLoss(nn.Module):
         with CONFIG.enable_auto_create():
             CONFIG.BOXLOSS.LAMBDA_GIOU = 10.0
             CONFIG.BOXLOSS.LAMBDA_L1   = 1.0
-            CONFIG.REDUCTION           = 'mean'
 
         return CONFIG
 
@@ -74,88 +73,54 @@ class HungarianLoss(nn.Module):
 
         self.BoxLoss = BoxLoss(self.config.BOXLOSS.LAMBDA_GIOU,
                                self.config.BOXLOSS.LAMBDA_L1,
-                               self.config.REDUCTION)
+                               reduction = 'none')
 
-        self.CrossEntropyLoss = nn.CrossEntropyLoss(reduction = self.config.REDUCTION)
+        self.CrossEntropyLoss = nn.CrossEntropyLoss(reduction = 'none')
 
 
-
-    def calculate_pairwis_loss(self, source_class_logits, target_classes, source_boxes, target_boxes):
+    def forward(self, source_class_logits, target_classes, source_boxes, target_boxes):
         """
         Arguments:
-            source_class_logits: Tensor with shape of (Ns, LOGIT_DIM).
-            target_classes     : Tensor with shape of (Nt, ).
-            source_boxes       : Tensor with shape of (Ns, 4).
-            target_boxes       : yensor with shape of (Nt, 4).
+            source_class_logits: Tensor with shape of (B, Ns, LOGIT_DIM).
+            target_classes     : Tensor with shape of (B, Nt,          ).
+            source_boxes       : Tensor with shape of (B, Ns, 4        ).
+            target_boxes       : Tensor with shape of (B, Nt, 4        ).
 
         Returns:
             source_idx: Tensor with shape of (Nm).
             target_idx: Tensor with shape of (Nm).
         """
-        ## # ___/ DRAFT \___
-        ## B, Ns, Nt = 10, 12, 12
-        ## 
-        ## source_class_logits = torch.randn(B, Ns, 2) 
-        ## target_classes = torch.randint(0, 2, (B, Nt))
-        ## 
-        ## source_boxes = torch.randn(B, Ns, 4)
-        ## target_boxes = torch.randn(B, Nt, 4)
-        ## boxloss_fn = BoxLoss(reduction = 'none')
-        ## giouloss_fn = GIOULoss(reduction = 'none')
-        ## for batch_idx in range(B):
-        ##     extend_source_class_logits = source_class_logits[batch_idx,     :, None,     :].expand(-1, Ns, -1)
-        ##     extend_target_classes      = target_classes     [batch_idx, None,      :, None].expand(Ns, -1, -1)
-        ##
-        ##     flat_extend_source_class_logits   = extend_source_class_logits.flatten(start_dim = 0, end_dim = -2)
-        ##     flat_extend_target_classes = extend_target_classes.flatten(start_dim = 0, end_dim = -1)
-        ##
-        ##     loss_cross_entropy = F.cross_entropy(flat_extend_source_class_logits, 
-        ##                                          flat_extend_target_classes, reduction = 'none').view(Ns, Ns)
-        ##
-        ##     extend_source_boxes = source_boxes[batch_idx, :, None].expand( -1, Ns, -1)
-        ##     extend_target_boxes = target_boxes[batch_idx, None, :].expand(Ns, -1, -1)
-        ##
-        ##     flat_extend_source_boxes = extend_source_boxes.flatten(start_dim = 0, end_dim = -2)
-        ##     flat_extend_target_boxes = extend_target_boxes.flatten(start_dim = 0, end_dim = -2)
-        ##
-        ##     loss_l1 = F.l1_loss(flat_extend_source_boxes, flat_extend_target_boxes, reduction = 'none').view(Ns, Ns, -1).mean(dim = -1)
-        ##     loss_giou = giouloss_fn(flat_extend_source_boxes, flat_extend_target_boxes).view(Ns, Ns)
-        ##
-        ##     break
+        # Retrieve metadata...
+        B, Ns, _ = source_class_logits.shape
+        _, Nt    = target_classes.shape
 
-        # Calculate pairwise cross_entropy...
-        # (Ns, LOGIT_DIM) -> (Ns, 1, LOGIT_DIM)
-        # (Nt,          ) -> (1, Nt, 1)
-        # output: (Ns, Nt)
-        loss_cross_entropy = self.CrossEntropyLoss(source_class_logits[:, None, :], target_classes[None, :, None])
+        # Calculate Hungarian loss...
+        loss_hungarian_list = []
+        for batch_idx in range(B):
+            # Calculate pairwise cross entropy loss...
+            extend_source_class_logits = source_class_logits[batch_idx,    :, None,    :].expand(-1, Nt, -1)
+            extend_target_classes      = target_classes     [batch_idx, None,    :, None].expand(Ns, -1, -1)
 
-        # Calculate pairwise box loss...
-        # (Ns, 4) -> (Ns, 1, 4)
-        # (Nt, 4) -> (1, Nt, 4)
-        # (Ns, Nt)
-        loss_box = self.BoxLoss(source_boxes[:, None], target_boxes[None, ])
+            flat_extend_source_class_logits = extend_source_class_logits.flatten(start_dim = 0, end_dim = -2)    # ...Not including feature dimension (dim=-1)
+            flat_extend_target_classes      = extend_target_classes.flatten     (start_dim = 0, end_dim = -1)
 
-        return loss_cross_entropy + loss_box
+            loss_cross_entropy = self.CrossEntropyLoss(flat_extend_source_class_logits,
+                                                       flat_extend_target_classes,).view(Ns, Nt)
 
+            # Calculate pairwise box loss...
+            extend_source_boxes = source_boxes[batch_idx,    :, None].expand(-1, Nt, -1)
+            extend_target_boxes = target_boxes[batch_idx, None,    :].expand(Ns, -1, -1)
 
-    @staticmethod
-    def assign_matching_idx(self, source, target):
-        """
-        Arguments:
-            source: Tensor with shape of (B, Ns, DETR_OUTPUT_DIM).
-            target: Tensor with shape of (B, Nt, DETR_OUTPUT_DIM).
+            flat_extend_source_boxes = extend_source_boxes.flatten(start_dim = 0, end_dim = -2)
+            flat_extend_target_boxes = extend_target_boxes.flatten(start_dim = 0, end_dim = -2)
 
-        Returns:
-            source_idx: Tensor with shape of (B, Nm).
-            target_idx: Tensor with shape of (B, Nm).
-        """
-        source_class_logits = source[...,   :-4]    # (B, Ns, LOGIT_DIM)
-        source_boxes        = source[..., -4:  ]    # (B, Ns, 4)
+            loss_box = self.BoxLoss(flat_extend_source_boxes, flat_extend_target_boxes).view(Ns, Nt)
 
-        target_class_logits = target[...,   :-4]    # (B, Nt, LOGIT_DIM)
-        target_boxes        = target[..., -4:  ]    # (B, Nt, 4)
+            # Figure out bipartite matching...
+            loss_matrix      = loss_cross_entropy + loss_box
+            row_idx, col_idx = linear_sum_assignment(loss_matrix)
+            loss_hungarian   = loss_matrix[row_idx, col_idx].mean()
 
-        target_class = torch.argmax(target_class_logits, dim = -1)    # ...Feature dim; (B, Nt)
+            loss_hungarian_list.append(loss_hungarian)
 
-
-        ## linear_sum_assignment()
+        return torch.stack(loss_hungarian_list)
