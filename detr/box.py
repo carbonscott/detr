@@ -9,7 +9,8 @@ import torch.nn.functional as F
 class GIOU(nn.Module):
     @staticmethod
     def yxyx_to_yxhw(yxyx):
-        y_min, x_min, y_max, x_max = yxyx
+        instance_axes = range(yxyx.ndim - 1)
+        y_min, x_min, y_max, x_max = yxyx.permute(-1, *instance_axes)
 
         h = y_max - y_min
         w = x_max - x_min
@@ -17,19 +18,26 @@ class GIOU(nn.Module):
         y_c = (y_max + y_min)/2
         x_c = (x_max + x_min)/2
 
-        return y_c, x_c, h, w
+        yxhw = torch.stack([y_c, x_c, h, w])
+        instance_axes = range(1, yxhw.ndim)
+
+        return yxhw.permute(*instance_axes, 0)
 
 
     @staticmethod
     def yxhw_to_yxyx(yxhw):
-        y_c, x_c, h, w = yxhw
+        instance_axes = range(yxhw.ndim - 1)
+        y_c, x_c, h, w = yxhw.permute(-1, *instance_axes)
 
         y_min = y_c - h/2
         y_max = y_c + h/2
         x_min = x_c - w/2
         x_max = x_c + w/2
 
-        return y_min, x_min, y_max, x_max
+        yxyx = torch.stack([y_min, x_min, y_max, x_max])
+        instance_axes = range(1, yxyx.ndim)
+
+        return yxyx.permute(*instance_axes, 0)
 
 
     @staticmethod
