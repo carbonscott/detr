@@ -216,7 +216,7 @@ class GIOU(nn.Module):
         area_intersection_boxes = GIOU.calculate_pairwise_intersection_area(source_boxes, target_boxes)
 
         # Calculate the area of the union (A + B - Intersection(A, B))...
-        area_union_boxes = area_source_boxes + area_target_boxes - area_intersection_boxes
+        area_union_boxes = area_source_boxes[:, None] + area_target_boxes[None, :] - area_intersection_boxes
 
         return area_union_boxes
 
