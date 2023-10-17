@@ -63,7 +63,7 @@ class HungarianLoss(nn.Module):
             CONFIG.BOXLOSS.LAMBDA_GIOU = 10.0
             CONFIG.BOXLOSS.LAMBDA_L1   = 1.0
 
-            CONFIG.DEBUG = False
+            CONFIG.ENABLES_TRACK_VAR = False
 
         return CONFIG
 
@@ -79,11 +79,11 @@ class HungarianLoss(nn.Module):
 
         self.CrossEntropyLoss = nn.CrossEntropyLoss(reduction = 'none')
 
-        self.track_var_dict = {} if self.config.DEBUG else None
+        self.track_var_dict = {} if self.config.ENABLES_TRACK_VAR else None
 
 
-    def debug_track_var(self, k, v):
-        if self.config.DEBUG:
+    def track_var(self, k, v):
+        if self.config.ENABLES_TRACK_VAR:
             if not k in self.track_var_dict: self.track_var_dict[k] = []
             self.track_var_dict[k].append(v)
 
@@ -133,6 +133,6 @@ class HungarianLoss(nn.Module):
 
             loss_hungarian_list.append(loss_hungarian)
 
-            self.debug_track_var(k = 'lsa', v = (batch_idx, (row_idx, col_idx)))
+            self.track_var(k = 'lsa', v = (batch_idx, (row_idx, col_idx)))
 
         return torch.stack(loss_hungarian_list)
