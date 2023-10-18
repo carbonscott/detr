@@ -13,7 +13,8 @@ from .configurator import Configurator
 
 
 class GIOULoss(nn.Module):
-    def __init__(self, reduction = 'mean'):
+
+    def __init__(self, reduction = 'none'):
         super().__init__()
 
         self.reduce_fn = {
@@ -21,6 +22,12 @@ class GIOULoss(nn.Module):
             'mean' : torch.mean,
             'sum'  : torch.sum,
         }[reduction]
+
+
+    def track_var(self, k, v):
+        if self.config.ENABLES_TRACK_VAR:
+            if not k in self.track_var_dict: self.track_var_dict[k] = []
+            self.track_var_dict[k].append(v)
 
 
     def forward(self, source_boxes, target_boxes):
@@ -35,21 +42,47 @@ class GIOULoss(nn.Module):
 
 
 class BoxLoss(nn.Module):
-    def __init__(self, lambda_giou = 10, lambda_l1 = 1, reduction = 'mean'):
+
+    @staticmethod
+    def get_default_config():
+        CONFIG = Configurator()
+        with CONFIG.enable_auto_create():
+            CONFIG.LAMBDA_GIOU = 10.0
+            CONFIG.LAMBDA_L1   = 1.0
+
+            CONFIG.REDUCTION   = 'none'
+
+            CONFIG.ENABLES_TRACK_VAR = False
+
+        return CONFIG
+
+
+    def __init__(self, config = None):
         super().__init__()
 
-        self.lambda_giou = lambda_giou
-        self.lambda_l1   = lambda_l1
+        self.config = BoxLoss.get_default_config() if config is None else config
 
-        self.GIOULoss = GIOULoss (reduction = reduction)
-        self.L1Loss   = nn.L1Loss(reduction = reduction)
+        self.GIOULoss = GIOULoss (reduction = self.config.REDUCTION)
+        self.L1Loss   = nn.L1Loss(reduction = self.config.REDUCTION)
+
+        self.track_var_dict = {} if self.config.ENABLES_TRACK_VAR else None
+
+
+    def track_var(self, k, v):
+        if self.config.ENABLES_TRACK_VAR:
+            if not k in self.track_var_dict: self.track_var_dict[k] = []
+            self.track_var_dict[k].append(v)
 
 
     def forward(self, source_boxes, target_boxes):
         loss_giou = self.GIOULoss(source_boxes, target_boxes)
         loss_l1   = self.L1Loss  (source_boxes, target_boxes).mean(dim = -1)
 
-        return self.lambda_giou * loss_giou + self.lambda_l1 * loss_l1
+        # [DEBUG ONLY] Track variables
+        self.track_var(k = 'loss_giou', v = loss_giou)
+        self.track_var(k = 'loss_l1'  , v = loss_l1)
+
+        return self.config.LAMBDA_GIOU * loss_giou + self.config.LAMBDA_L1 * loss_l1
 
 
 
@@ -60,8 +93,10 @@ class HungarianLoss(nn.Module):
     def get_default_config():
         CONFIG = Configurator()
         with CONFIG.enable_auto_create():
-            CONFIG.BOXLOSS.LAMBDA_GIOU = 10.0
-            CONFIG.BOXLOSS.LAMBDA_L1   = 1.0
+            CONFIG.BOXLOSS.LAMBDA_GIOU       = 10.0
+            CONFIG.BOXLOSS.LAMBDA_L1         = 1.0
+            CONFIG.BOXLOSS.REDUCTION         = 'none'
+            CONFIG.BOXLOSS.ENABLES_TRACK_VAR = False
 
             CONFIG.ENABLES_TRACK_VAR = False
 
@@ -73,9 +108,7 @@ class HungarianLoss(nn.Module):
 
         self.config = HungarianLoss.get_default_config() if config is None else config
 
-        self.BoxLoss = BoxLoss(self.config.BOXLOSS.LAMBDA_GIOU,
-                               self.config.BOXLOSS.LAMBDA_L1,
-                               reduction = 'none')
+        self.BoxLoss = BoxLoss(config = self.config.BOXLOSS)
 
         self.CrossEntropyLoss = nn.CrossEntropyLoss(reduction = 'none')
 
@@ -133,6 +166,11 @@ class HungarianLoss(nn.Module):
 
             loss_hungarian_list.append(loss_hungarian)
 
-            self.track_var(k = 'lsa', v = (batch_idx, (row_idx, col_idx)))
+            # [DEBUG ONLY] Track variables
+            self.track_var(k = 'lsa'               , v = (batch_idx, row_idx, col_idx))
+            self.track_var(k = 'loss_cross_entropy', v = (batch_idx, loss_cross_entropy))
+            self.track_var(k = 'loss_box'          , v = (batch_idx, loss_box))
+            self.track_var(k = 'loss_giou'         , v = (batch_idx, self.BoxLoss.track_var_dict['loss_giou']))
+            self.track_var(k = 'loss_l1'           , v = (batch_idx, self.BoxLoss.track_var_dict['loss_l1']))
 
         return torch.stack(loss_hungarian_list)
