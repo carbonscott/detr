@@ -88,7 +88,10 @@ class GIOU(nn.Module):
         min_coords = torch.max(source_boxes[:,  :2], target_boxes[:,  :2])    # (B, 2)
         max_coords = torch.min(source_boxes[:, 2: ], target_boxes[:, 2: ])    # (B, 2)
 
+        is_illegal_box = torch.all(max_coords - min_coords < 0, dim = -1)
+
         intersection_boxes = torch.cat([min_coords, max_coords], dim = -1)    # (B, 4)
+        intersection_boxes[is_illegal_box] = 0.0
 
         return intersection_boxes
 

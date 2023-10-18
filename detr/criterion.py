@@ -166,11 +166,14 @@ class HungarianLoss(nn.Module):
 
             loss_hungarian_list.append(loss_hungarian)
 
-            # [DEBUG ONLY] Track variables
-            self.track_var(k = 'lsa'               , v = (batch_idx, row_idx, col_idx))
-            self.track_var(k = 'loss_cross_entropy', v = (batch_idx, loss_cross_entropy))
-            self.track_var(k = 'loss_box'          , v = (batch_idx, loss_box))
-            self.track_var(k = 'loss_giou'         , v = (batch_idx, self.BoxLoss.track_var_dict['loss_giou']))
-            self.track_var(k = 'loss_l1'           , v = (batch_idx, self.BoxLoss.track_var_dict['loss_l1']))
+            ## # [DEBUG ONLY] Track variables
+            ## # This is an ugly way of debugging codes.  I'm open ot any suggestion that will improve it.
+            ## self.track_var(k = 'lsa'                     , v = (batch_idx, row_idx, col_idx))
+            ## self.track_var(k = 'loss_cross_entropy'      , v = (batch_idx, loss_cross_entropy))
+            ## self.track_var(k = 'loss_box'                , v = (batch_idx, loss_box))
+            ## self.track_var(k = 'loss_giou'               , v = (batch_idx, self.BoxLoss.track_var_dict['loss_giou']))
+            ## self.track_var(k = 'loss_l1'                 , v = (batch_idx, self.BoxLoss.track_var_dict['loss_l1']))
+            ## self.track_var(k = 'flat_extend_source_boxes', v = (batch_idx, flat_extend_source_boxes))
+            ## self.track_var(k = 'flat_extend_target_boxes', v = (batch_idx, flat_extend_target_boxes))
 
         return torch.stack(loss_hungarian_list)
