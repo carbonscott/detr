@@ -338,8 +338,11 @@ class TransformerEncoderDecoder(nn.Module):
         # ___/ Decoder \___
         # Go through multi-head attention to update nodes in vector space...
         T = len(self.query_pos_indices)
-        embd_q = self.pos_embd_layer_object_query(self.query_pos_indices[:T])
-        embd_q = embd_q.repeat(B, *((1,)*embd_q.ndim))
+        embd_q = self.pos_embd_layer_object_query(self.query_pos_indices[:T])    # (T, E)
+        embd_q = embd_q.repeat(B, *((1,)*embd_q.ndim))    # (T, E) -> (B, T, E)
+                                                          # repeat(B, 1, 1): repeat B times along 0-th dim
+                                                          #                  repeat 1 times along 1-th dim
+                                                          #                  repeat 1 times along 2-th dim
         for block in self.decoder:
             embd_q = block(embd_q, embd_k, embd_v)    # (B, T, E)
 
